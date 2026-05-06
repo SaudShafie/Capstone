@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: org.example.capstone1.Capstone1ApplicationTests
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.934 s -- in org.example.capstone1.Capstone1ApplicationTests

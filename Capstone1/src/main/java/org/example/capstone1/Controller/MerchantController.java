@@ -3,8 +3,10 @@ package org.example.capstone1.Controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.capstone1.ApiResponse.ApiResponse;
-import org.example.capstone1.Model.*;
-import org.example.capstone1.Service.*;
+import org.example.capstone1.Model.Merchant;
+import org.example.capstone1.Model.MerchantStock;
+import org.example.capstone1.Model.Product;
+import org.example.capstone1.Service.MerchantService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.Errors;
 import org.springframework.web.bind.annotation.*;
@@ -16,9 +18,6 @@ import java.util.ArrayList;
 @RequiredArgsConstructor
 public class MerchantController {
     private final MerchantService merchantService;
-    private final PurchaseService purchaseService;
-    private final ProductService productService;
-    private final MerchantStockService merchantStockService;
 
     @GetMapping("/get-merchants")
     public ResponseEntity<?> getMerchant(){
@@ -60,18 +59,7 @@ public class MerchantController {
         if (!merchantService.checkId(merchantId)) {
             return ResponseEntity.status(400).body(new ApiResponse("Merchant not found"));
         }
-        int totalSold = 0;
-        double totalProfit = 0;
-        for (Purchase p : purchaseService.getPurchases()) {
-            if (p.getMerchantId().equals(merchantId)) {
-                Product product = productService.getById(p.getProductId());
-                double profitPerItem = product.getPrice() - product.getCostPrice();
-
-                totalSold += p.getQuantity();
-                totalProfit += profitPerItem * p.getQuantity();
-            }
-        }
-        return ResponseEntity.status(200).body("Total sold: " + totalSold +" | Total profit: " + totalProfit);
+        return ResponseEntity.status(200).body(merchantService.getMerchantReport(merchantId));
     }
     //Top Selling Product
     @GetMapping("/merchant-top-selling-product/{merchantId}")
@@ -79,16 +67,18 @@ public class MerchantController {
         if (!merchantService.checkId(merchantId)) {
             return ResponseEntity.status(400).body(new ApiResponse("Merchant not found"));
         }
-        return ResponseEntity.status(200).body(merchantService.getTopSellingProduct(merchantId));
+        Product topSellingProduct = merchantService.getTopSellingProduct(merchantId);
+        if (topSellingProduct == null) {
+            return ResponseEntity.status(400).body(new ApiResponse("No top selling product found for this merchant yet"));
+        }
+        return ResponseEntity.status(200).body(topSellingProduct);
     }
     @GetMapping("/get-low-in-stock/{merchantId}")
     public ResponseEntity<?> lowInStock(@PathVariable String merchantId){
-        ArrayList<MerchantStock> lowInStock=merchantStockService.lowInStock(merchantId);
+        ArrayList<MerchantStock> lowInStock = merchantService.getLowInStock(merchantId);
         if (lowInStock.isEmpty()){
             return ResponseEntity.status(400).body(new ApiResponse("there is nothing in low"));
-
         }
         return ResponseEntity.status(200).body(lowInStock);
-
     }
 }

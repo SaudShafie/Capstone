@@ -4,9 +4,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.capstone1.ApiResponse.ApiResponse;
 import org.example.capstone1.Model.Product;
-import org.example.capstone1.Model.Purchase;
 import org.example.capstone1.Model.User;
-import org.example.capstone1.Service.*;
+import org.example.capstone1.Service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.Errors;
 import org.springframework.web.bind.annotation.*;
@@ -18,10 +17,6 @@ import java.util.ArrayList;
 @RequiredArgsConstructor
 public class UserController {
     private final UserService userService;
-    private final ProductService productService;
-    private final MerchantService merchantService;
-    private final MerchantStockService merchantStockService;
-    private final PurchaseService purchaseService;
 
     @GetMapping("/get-users")
     public ResponseEntity<?> getUsers() {
@@ -66,19 +61,21 @@ public class UserController {
     public ResponseEntity<?> buyProduct(@PathVariable String userId, @PathVariable String productId, @PathVariable String merchantId) {
         if (!userService.checkId(userId))
             return ResponseEntity.status(400).body(new ApiResponse("User id is not found"));
-        if (!productService.checkId(productId))
+        if (!userService.isCustomer(userId))
+            return ResponseEntity.status(400).body(new ApiResponse("Only Customer users can buy products"));
+        if (!userService.checkProductId(productId))
             return ResponseEntity.status(400).body(new ApiResponse("Product id is not found"));
-        if (!merchantService.checkId(merchantId))
+        if (!userService.checkMerchantId(merchantId))
             return ResponseEntity.status(400).body(new ApiResponse("Merchant id is not found"));
-        double price = productService.getById(productId).getPrice();
+        double price = userService.getProductById(productId).getPrice();
         double balance = userService.getById(userId).getBalance();
         boolean haveBalance = balance >= price;
-        if (!merchantStockService.hasEnoughStock(productId, merchantId, 1))
+        if (!userService.hasEnoughStock(productId, merchantId, 1))
             return ResponseEntity.status(400).body(new ApiResponse("product is out of stock"));
         if (!haveBalance) return ResponseEntity.status(400).body(new ApiResponse("User balance is insufficient "));
-        merchantStockService.reduceStock(productId,merchantId, 1);
+        userService.reduceStock(productId, merchantId, 1);
         userService.deductFromBalance(userId, price);
-        purchaseService.addPurchase(new Purchase(userId, productId, merchantId, 1));
+        userService.addPurchase(userId, productId, merchantId, 1);
         return ResponseEntity.status(200).body(new ApiResponse("purchase has been made!!! your new balance is " + (balance - price)));
     }
 
@@ -86,38 +83,40 @@ public class UserController {
     public ResponseEntity<?> buyQuantityOfProduct(@PathVariable String userId, @PathVariable String productId, @PathVariable int quantity) {
         if (!userService.checkId(userId))
             return ResponseEntity.status(400).body(new ApiResponse("User id is not found"));
-        if (!productService.checkId(productId))
+        if (!userService.isCustomer(userId))
+            return ResponseEntity.status(400).body(new ApiResponse("Only Customer users can buy products"));
+        if (!userService.checkProductId(productId))
             return ResponseEntity.status(400).body(new ApiResponse("Product id is not found"));
         if (quantity <= 0)
             return ResponseEntity.status(400).body(new ApiResponse("Quantity should be greater than zero"));
 
-        String bestMerchantId = merchantStockService.findBestOfferMerchantId(productId, quantity);
+        String bestMerchantId = userService.findBestOfferMerchantId(productId, quantity);
         if (bestMerchantId == null)
             return ResponseEntity.status(400).body(new ApiResponse("No merchant can fulfill this quantity"));
 
-        double price = productService.getById(productId).getPrice();
+        double price = userService.getProductById(productId).getPrice();
         double balance = userService.getById(userId).getBalance();
         boolean haveBalance = (balance >= (price * quantity));
         if (!haveBalance) return ResponseEntity.status(400).body(new ApiResponse("User balance is insufficient "));
-        merchantStockService.reduceStock(productId, bestMerchantId,quantity);
+        userService.reduceStock(productId, bestMerchantId,quantity);
         userService.deductFromBalance(userId, price*quantity);
-        purchaseService.addPurchase(new Purchase(userId, productId, bestMerchantId, quantity));
+        userService.addPurchase(userId, productId, bestMerchantId, quantity);
         return ResponseEntity.status(200).body(new ApiResponse("purchase has been made with merchant "
                 + bestMerchantId + "!!! your new balance is " + (balance - (price * quantity))));
     }
 
     @GetMapping("/best-offer/{productId}/{quantity}")
     public ResponseEntity<?> getBestOffer(@PathVariable String productId, @PathVariable int quantity) {
-        if (!productService.checkId(productId))
+        if (!userService.checkProductId(productId))
             return ResponseEntity.status(400).body(new ApiResponse("Product id is not found"));
         if (quantity <= 0)
             return ResponseEntity.status(400).body(new ApiResponse("Quantity should be greater than zero"));
 
-        String bestMerchantId = merchantStockService.findBestOfferMerchantId(productId, quantity);
+        String bestMerchantId = userService.findBestOfferMerchantId(productId, quantity);
         if (bestMerchantId == null)
             return ResponseEntity.status(400).body(new ApiResponse("No merchant can fulfill this quantity"));
 
-        double totalPrice = productService.getById(productId).getPrice() * quantity;
+        double totalPrice = userService.getProductById(productId).getPrice() * quantity;
         return ResponseEntity.status(200).body(new ApiResponse("Best offer merchant: "
                 + bestMerchantId + " | Total price: " + totalPrice));
     }
@@ -126,25 +125,27 @@ public class UserController {
     public ResponseEntity<?> refund(@PathVariable String userId, @PathVariable String productId,@PathVariable String merchantId) {
         if (!userService.checkId(userId))
             return ResponseEntity.status(400).body(new ApiResponse("User id is not found"));
-        if (!productService.checkId(productId))
+        if (!userService.isCustomer(userId))
+            return ResponseEntity.status(400).body(new ApiResponse("Only Customer users can request refunds"));
+        if (!userService.checkProductId(productId))
             return ResponseEntity.status(400).body(new ApiResponse("Product id is not found"));
-        if (!merchantService.checkId(merchantId))
+        if (!userService.checkMerchantId(merchantId))
             return ResponseEntity.status(400).body(new ApiResponse("Merchant id is not found"));
 
-        int quantity = purchaseService.getQuantityAndCancelPurchase(userId, productId, merchantId);
+        int quantity = userService.getQuantityAndCancelPurchase(userId, productId, merchantId);
         if (quantity == 0)
             return ResponseEntity.status(400).body(new ApiResponse("The purchase has never been made!!"));
-        merchantStockService.increaseStock(productId,merchantId, quantity);
-        userService.addToBalance(userId, (productService.getById(productId).getPrice() * quantity));
+        userService.increaseStock(productId,merchantId, quantity);
+        userService.addToBalance(userId, (userService.getProductById(productId).getPrice() * quantity));
         return ResponseEntity.status(200).body(new ApiResponse("Refund is done"));
-
-
     }
 
     @PutMapping("/transfer-from-wallet/{userFromId}/{userToId}/{amount}")
     public ResponseEntity<?> transferFromWallet(@PathVariable String userFromId, @PathVariable String userToId, @PathVariable double amount) {
         if (!userService.checkId(userFromId)) return ResponseEntity.status(400).body(new ApiResponse("the user trying to transfer is not found"));
         if (!userService.checkId(userToId)) return ResponseEntity.status(400).body(new ApiResponse("the user you trying to transfer to is not found"));
+        if (!userService.isCustomer(userFromId) || !userService.isCustomer(userToId))
+            return ResponseEntity.status(400).body(new ApiResponse("Wallet transfer is allowed between Customer users only"));
         if (amount <= 0) return ResponseEntity.status(400).body(new ApiResponse("Transfer amount should be greater than zero"));
         double balance = userService.getById(userFromId).getBalance();
         boolean haveBalance = (balance >= amount);
@@ -152,39 +153,80 @@ public class UserController {
         userService.deductFromBalance(userFromId, amount);
         userService.addToBalance(userToId, amount);
         return ResponseEntity.status(200).body(new ApiResponse("Transfer is Done successfully"));
-
-
     }
     @GetMapping("/get-user-purchases/{userId}")
     public ResponseEntity<?> getUserPurchases(@PathVariable String userId){
         if (!userService.checkId(userId))
             return ResponseEntity.status(400).body(new ApiResponse("User id is not found"));
-
-        return ResponseEntity.status(200).body(purchaseService.getByUserId(userId));
-
+        if (!userService.isCustomer(userId))
+            return ResponseEntity.status(400).body(new ApiResponse("Only Customer users have purchase history"));
+        ArrayList<String[]> purchases = userService.getPurchasesByUserId(userId);
+        if (purchases.isEmpty()) {
+            return ResponseEntity.status(200).body(new ApiResponse("No purchases found for this user"));
+        }
+        return ResponseEntity.status(200).body(purchases);
     }
 
     @GetMapping("/purchase-summary/{userId}")
     public ResponseEntity<?> getPurchaseSummary(@PathVariable String userId) {
         if (!userService.checkId(userId))
             return ResponseEntity.status(400).body(new ApiResponse("User id is not found"));
-
-        ArrayList<Purchase> userPurchases = purchaseService.getByUserId(userId);
+        if (!userService.isCustomer(userId))
+            return ResponseEntity.status(400).body(new ApiResponse("Only Customer users have purchase summaries"));
+        ArrayList<String[]> userPurchases = userService.getPurchasesByUserId(userId);
         int totalOrders = userPurchases.size();
         int totalItems = 0;
         double totalSpent = 0;
-
-        for (Purchase purchase : userPurchases) {
-            totalItems += purchase.getQuantity();
-            Product product = productService.getById(purchase.getProductId());
+        for (String[] purchase : userPurchases) {
+            int quantity = Integer.parseInt(purchase[2]);
+            totalItems += quantity;
+            Product product = userService.getProductById(purchase[0]);
             if (product != null) {
-                totalSpent += product.getPrice() * purchase.getQuantity();
+                totalSpent += product.getPrice() * quantity;
             }
         }
         String summaryMessage = "Purchase summary | userId: " + userId
                 + " | total orders: " + totalOrders
                 + " | total items: " + totalItems
                 + " | total spent: " + totalSpent;
+        return ResponseEntity.status(200).body(new ApiResponse(summaryMessage));
+    }
+
+    @GetMapping("/admin-sales-summary/{adminId}")
+    public ResponseEntity<?> getAdminSalesSummary(@PathVariable String adminId) {
+        if (!userService.checkId(adminId))
+            return ResponseEntity.status(400).body(new ApiResponse("User id is not found"));
+        if (!userService.isAdmin(adminId))
+            return ResponseEntity.status(400).body(new ApiResponse("This endpoint is for Admin users only"));
+
+        int totalOrders = 0;
+        int totalItems = 0;
+        double totalSales = 0;
+        int customersWithPurchases = 0;
+
+        for (User user : userService.getUsers()) {
+            if (!userService.isCustomer(user.getId())) {
+                continue;
+            }
+            ArrayList<String[]> purchases = userService.getPurchasesByUserId(user.getId());
+            if (!purchases.isEmpty()) {
+                customersWithPurchases++;
+            }
+            for (String[] purchase : purchases) {
+                int quantity = Integer.parseInt(purchase[2]);
+                Product product = userService.getProductById(purchase[0]);
+                if (product == null) {
+                    continue;
+                }
+                totalOrders++;
+                totalItems += quantity;
+                totalSales += product.getPrice() * quantity;
+            }
+        }
+        String summaryMessage = "Admin sales summary | total orders: " + totalOrders
+                + " | total items: " + totalItems
+                + " | total sales: " + totalSales
+                + " | customers with purchases: " + customersWithPurchases;
         return ResponseEntity.status(200).body(new ApiResponse(summaryMessage));
     }
 }

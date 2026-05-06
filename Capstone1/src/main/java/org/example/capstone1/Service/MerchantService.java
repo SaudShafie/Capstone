@@ -10,8 +10,8 @@ import java.util.ArrayList;
 @RequiredArgsConstructor
 public class MerchantService {
     private final ProductService productService;
-    private final PurchaseService purchaseService;
     private final MerchantStockService merchantStockService;
+    private final UserService userService;
     private ArrayList<Merchant>merchants= new ArrayList<>();
     public ArrayList<Merchant> getMerchants(){
         return merchants;
@@ -76,6 +76,31 @@ public class MerchantService {
         }
         if (topProductId == null) return null;
         return productService.getById(topProductId);
+    }
+
+    public String getMerchantReport(String merchantId) {
+        int totalSold = 0;
+        double totalProfit = 0;
+        for (User user : userService.getUsers()) {
+            for (String[] p : user.getPurchases()) {
+                if (!p[1].equals(merchantId)) {
+                    continue;
+                }
+                Product product = productService.getById(p[0]);
+                if (product == null) {
+                    continue;
+                }
+                double profitPerItem = product.getPrice() - product.getCostPrice();
+                int quantity = Integer.parseInt(p[2]);
+                totalSold += quantity;
+                totalProfit += profitPerItem * quantity;
+            }
+        }
+        return "Total sold: " + totalSold +" | Total profit: " + totalProfit;
+    }
+
+    public ArrayList<MerchantStock> getLowInStock(String merchantId) {
+        return merchantStockService.lowInStock(merchantId);
     }
 
 }

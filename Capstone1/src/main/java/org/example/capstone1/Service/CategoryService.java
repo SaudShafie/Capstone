@@ -1,13 +1,16 @@
 package org.example.capstone1.Service;
 
+import lombok.RequiredArgsConstructor;
 import org.example.capstone1.Model.Category;
-import org.springframework.context.annotation.Bean;
+import org.example.capstone1.Model.Product;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 
 @Service
+@RequiredArgsConstructor
 public class CategoryService {
+    private final ProductService productService;
      private ArrayList<Category> categories =new ArrayList<>();
     public ArrayList<Category> getCategories(){
         return categories;
@@ -64,5 +67,25 @@ public class CategoryService {
             }
         }
         return false;
+    }
+
+    public ArrayList<Product> getProductsByCategoryName(String name) {
+        String categoryId = "";
+        for (Category category : categories) {
+            if (category.getName().equals(name)) {
+                categoryId = category.getId();
+                break;
+            }
+        }
+        if (categoryId.isEmpty()) {
+            return new ArrayList<>();
+        }
+        ArrayList<Product> productsByCategory = new ArrayList<>();
+        for (Product product : productService.getProducts()) {
+            if (product.getCategoryId().equals(categoryId)) {
+                productsByCategory.add(product);
+            }
+        }
+        return productsByCategory;
     }
 }

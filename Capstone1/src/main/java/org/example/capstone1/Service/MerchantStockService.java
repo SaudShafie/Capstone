@@ -58,6 +58,14 @@ public class MerchantStockService {
         }
         return false;
     }
+    public boolean checkMerchantId(String merchantId){
+        for (MerchantStock merchantStock : merchantStocks){
+            if (merchantStock.getMerchantId().equals(merchantId)){
+                return true;
+            }
+        }
+        return false;
+    }
     public boolean inStockByIdOfProduct(String id){
         for (int i = 0; i < merchantStocks.size(); i++) {
             if (merchantStocks.get(i).getProductId().equals(id)){

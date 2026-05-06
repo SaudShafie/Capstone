@@ -4,8 +4,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.capstone1.ApiResponse.ApiResponse;
 import org.example.capstone1.Model.Category;
+import org.example.capstone1.Model.Product;
 import org.example.capstone1.Service.CategoryService;
-import org.example.capstone1.Service.ProductService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.Errors;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +18,6 @@ import java.util.ArrayList;
 
 public class CategoryController {
     private final CategoryService categoryService;
-    private final ProductService productService;
 
     @GetMapping("/get-categories")
     public ResponseEntity<?> getCategories() {
@@ -62,7 +61,11 @@ public class CategoryController {
     public ResponseEntity<?> getByCategoryName(@PathVariable String name) {
         if (!categoryService.checkName(name))
             return ResponseEntity.status(400).body(new ApiResponse("Theres no category with this name"));
-        return ResponseEntity.status(200).body(productService.getByCategory(name));
+        ArrayList<Product> products = categoryService.getProductsByCategoryName(name);
+        if (products.isEmpty()) {
+            return ResponseEntity.status(200).body(new ApiResponse("No products found in this category"));
+        }
+        return ResponseEntity.status(200).body(products);
     }
 
 }
